@@ -1,0 +1,404 @@
+---
+title: "Koko Skills Test Analysis"
+author: "Denis Munene"
+date: " `r as.Date(Sys.time())` "
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE, cache=F}
+
+knitr::opts_chunk$set(echo = F, warning = F, message = F, fig.width = 10, fig.height = 10)
+
+```
+
+# Data Analysis
+
+
+```{r packages}
+## Importing Libraries
+
+# load libraries
+
+library(readxl)
+library(openxlsx)
+library(dplyr)
+library(readxl)
+library(janitor)
+library(tidyr)
+library(ggplot2)
+
+```
+
+
+## Importing Datasets and Preprocesing
+
+```{r datasets, echo=TRUE}
+
+# import datasets
+
+dt1 <- readxl::read_xlsx("../AnalyticsSkillsTest-FictionalData.xlsx", sheet = "Sellers")
+dt2 <- readxl::read_xlsx("../AnalyticsSkillsTest-FictionalData.xlsx", sheet = "Cooker_Sales")
+dt3 <- readxl::read_xlsx("../AnalyticsSkillsTest-FictionalData.xlsx", sheet = "Fuel_Sales")
+
+
+### rename id
+dt2a <- dt2 %>% dplyr::rename(id = seller_id) 
+
+### Join Sellers and Cookers dt
+df1 <- dplyr::left_join(dt2a,dt1) ## by id
+
+
+```
+
+
+## Sales Productivity
+
+
+### Question 1
+
+### SQL Code
+
+#### NOTE 
+
+Use SQL Server Import and Export Wizard to Import the excel data on SQL or any other appropriate way before running codes below.\
+
+
+##### CookersSold by Type\
+
+use KokoData;
+select type,  COUNT(distinct Cooker_Sales$.customer_id) as CookersSold
+from Cooker_Sales$
+left join Sellers$
+on Cooker_Sales$.seller_id = Sellers$.id
+group by type
+order by CookersSold desc;
+
+##### Fuel Sold by Customer Type and Territory\
+
+select customer_type, sale_territory, SUM(litres_sold) as TotalLitersSold
+from Cooker_Sales$
+left join Sellers$
+on Cooker_Sales$.seller_id = Sellers$.id
+left join Fuel_Sales$
+on Cooker_Sales$.customer_id = Fuel_Sales$.customer_id
+group by customer_type, sale_territory
+order by TotalLitersSold desc;
+
+##### Fuel Sold by Seller Type\
+
+select type, SUM(litres_sold) as TotalLitersSold
+from Cooker_Sales$
+left join Sellers$
+on Cooker_Sales$.seller_id = Sellers$.id
+left join Fuel_Sales$
+on Cooker_Sales$.customer_id = Fuel_Sales$.customer_id
+group by type
+order by TotalLitersSold desc;
+
+##### CookersSold by Type and Total Liters (Correct)\
+
+select type, round(SUM(litres_sold),3) as TotalLitersSold, COUNT(distinct Cooker_Sales$.customer_id) as CookersSold
+from Cooker_Sales$
+left join Sellers$
+on Cooker_Sales$.seller_id = Sellers$.id
+left join Fuel_Sales$
+on Fuel_Sales$.customer_id = Cooker_Sales$.customer_id
+group by type
+order by CookersSold desc;
+
+### Plot1
+
+```{r plot1, echo=FALSE}
+#### CookersSold by Type
+
+cooker_sales <-  df1 %>% group_by(type) %>% summarise(customer_id = n())
+
+plot1 <- ggplot(data = cooker_sales, aes(y= customer_id, x = type,fill = type ))+ geom_bar(stat = "identity") +geom_text(aes(label=customer_id), vjust = 1.6, color = "black") + ggtitle("Cooker Sales Across Channels") +ylab("No of Customers") +theme_get()
+
+plot1
+```
+
+
+
+```{r ,echo=FALSE}
+#### Total Liters Purchased by Customer
+dt3a <- dt3 %>% group_by(customer_id) %>% summarise(TotalLitresSold = sum(litres_sold))
+
+
+### Fuel Sold by Seller Type
+fuel_sales <- left_join(dt3,dt2a) ## by customer_id
+
+fuel_sales_type <- left_join(fuel_sales,dt1) ## by id
+
+#### Total Liters Sold by Seller type
+litres_by_seller <- fuel_sales_type %>% group_by(type) %>% summarise(TotalLitresSold = sum(litres_sold))
+
+```
+
+### Plot2
+
+```{r plot2, echo=FALSE}
+### join with Fuel Sales
+df2 <- left_join(dt3a,df1) ## by customer_id
+
+
+#### Fuel Sold by Customer Type and Territory
+litres_by_customer_terr <- df2 %>% group_by(customer_type,sale_territory) %>% summarise(TotalLitresSold = sum(round(TotalLitresSold)))
+
+
+plot2 <- ggplot(data = litres_by_customer_terr, aes(y= TotalLitresSold, x = sale_territory, fill = customer_type ))+ geom_bar(position = "dodge", stat = "identity") + ggtitle("Liters Sold by Customer Type and Territory") + xlab("Territory")+coord_flip() +geom_text(aes(label=TotalLitresSold),position = position_dodge(.8),vjust = 1.1, color = "black")
+
+plot2
+```
+
+### Plot3
+
+```{r plot3, echo=FALSE}
+#### Fuel Sold by Seller Type
+
+plot3 <- ggplot(data = litres_by_seller, aes(y= TotalLitresSold, x = type, fill = type ))+ geom_bar(position = "dodge", stat = "identity") +geom_text(aes(label=TotalLitresSold),position = position_dodge(.8),vjust = 1.1, color = "black")+ ggtitle("Liters Sold by Seller Type") + xlab("type")
+
+plot3
+```
+
+
+```{r table1, echo=FALSE}
+
+table1 <- data.frame(litres_by_seller$type,litres_by_seller$TotalLitresSold)
+
+knitr::kable(table1,"pipe", col.names = gsub("fuel_salesprod.","",names(table1)))
+
+```
+
+
+### Question 2
+
+Referrer is most productive
+
+### Question 3
+Yes. Given that Refferers are making more cooker sales and simultaneously more fuel sales.
+
+
+### Question 4
+1) Agents making more fuel sales with less cooker sales compared to CSR hence more opportunity for productivity by increasing Agents
+2) Focus on restaurants in North as well as households and restaurants in south initially as they appear more promising
+
+
+### SQL Code
+
+
+##### sales by seller type and Territory\
+
+select type, sale_territory, round(SUM(litres_sold),3) as TotalLitersSold
+from Cooker_Sales$
+left join Sellers$
+on Cooker_Sales$.seller_id = Sellers$.id
+left join Fuel_Sales$
+on Cooker_Sales$.customer_id = Fuel_Sales$.customer_id
+group by type, sale_territory
+order by TotalLitersSold desc;
+
+### Plot4
+
+```{r plot4, echo=FALSE}
+
+#### Total Liters Sold by Seller type and territory
+litres_by_seller_terr <- fuel_sales_type %>% group_by(type,sale_territory) %>% summarise(TotalLitresSold = sum(litres_sold))
+
+#### Fuel Sold by Seller Type and territory
+
+plot4 <- ggplot(data = litres_by_seller_terr, aes(y= TotalLitresSold, x = sale_territory, fill = type ))+ geom_bar(position = "dodge", stat = "identity") +geom_text(aes(label=TotalLitresSold),position = position_dodge(.8),vjust = 1.1, color = "black")+ ggtitle("Liters Sold by Seller Type and Territory") + xlab("sale_territory")
+
+plot4
+
+```
+
+
+##### Sales by customer type and Territory for Agents\
+
+select type, sale_territory,COUNT(distinct Cooker_Sales$.customer_id) as CookersSold, round(SUM(litres_sold),3) as TotalLitersSold
+from Fuel_Sales$
+left join Cooker_Sales$
+on Fuel_Sales$.customer_id = Cooker_Sales$.customer_id
+left join Sellers$
+on Cooker_Sales$.seller_id = Sellers$.id
+where type = 'Agent'
+group by type, sale_territory
+order by TotalLitersSold desc, CookersSold asc;
+
+### Plot5
+
+```{r plot5, echo=FALSE}
+
+#### Total Liters Sold by Seller type and territory for Agents
+litres_by_seller_terr_ag <- subset(litres_by_seller_terr,type =="Agent")
+
+#### Fuel Sold by Seller Type and territory
+
+plot5 <- ggplot(data = litres_by_seller_terr_ag, aes(y= TotalLitresSold, x = sale_territory, fill = type ))+ geom_bar(position = "dodge", stat = "identity") +geom_text(aes(label=TotalLitresSold),position = position_dodge(.8),vjust = 1.1, color = "black")+ ggtitle("Liters Sold by Seller Type and Territory for Agents") + xlab("sale_territory")
+
+plot5
+
+```
+
+
+
+### Question 5
+
+Price of cooker and fuel to assess price sensitivity
+
+
+### Assumptions Made:
+1) linear relationship btwn fuel consumption relative to number of cookers
+2) same cost of cooker/fuel across locations
+3) same price points across customer types
+4) fair commission across seller types
+
+
+## Fuel consumption
+
+
+### Question 6
+
+
+```{r ,echo=FALSE, results=FALSE}
+
+#### Convert to date
+str(fuel_sales_type$tx_date)
+fuel_sales_type$tx_date <- as.Date(as.character(as.POSIXct(fuel_sales_type$tx_date)))
+
+str(fuel_sales_type$tx_date)
+
+### Convert to months
+
+fuel_sales_type$tx_date <- months(fuel_sales_type$tx_date)
+
+
+fuelconsumed_bymonth <- fuel_sales_type %>% group_by(type,tx_date) %>% summarise(Total_LitresSold = sum(litres_sold))
+
+```
+
+
+##### Total Monthly Fuel Consumption by Seller Type\
+
+select type, MONTH (tx_date) as mwezi, round(SUM(litres_sold),3) as TotalLitersSold
+from Cooker_Sales$
+left join Sellers$
+on Cooker_Sales$.seller_id = Sellers$.id
+left join Fuel_Sales$
+on Cooker_Sales$.customer_id = Fuel_Sales$.customer_id
+group by type,MONTH (tx_date)
+order by TotalLitersSold desc;
+
+
+
+```{r table2, echo=FALSE}
+table2 <- data.frame(fuelconsumed_bymonth$type,fuelconsumed_bymonth$tx_date,fuelconsumed_bymonth$Total_LitresSold)
+
+knitr::kable(table2,"pipe", col.names = gsub("fuelconsumed_bymonth.","",names(table2)))
+```
+### Plot6
+
+```{r}
+#### Total Monthly Fuel Consumption by Seller Type
+
+plot6 <- ggplot(data = fuelconsumed_bymonth, aes(y= Total_LitresSold, x = tx_date, fill = type ))+ geom_bar(position = "dodge", stat = "identity") +geom_text(aes(label=Total_LitresSold),position = position_dodge(.8),vjust = 1.1, color = "black")+ ggtitle("Total Monthly Fuel Consumption by Seller Type") + xlab("Month")
+
+plot6
+
+
+
+```
+
+
+##### AvgFuel Sold per cooker by Seller Type and Month
+
+select type,MONTH (tx_date) as mwezi, round(sum(litres_sold)/count(distinct Cooker_Sales$.customer_id),0) as average_literspercooker
+from Cooker_Sales$
+left join Sellers$
+on Cooker_Sales$.seller_id = Sellers$.id
+left join Fuel_Sales$
+on Cooker_Sales$.customer_id = Fuel_Sales$.customer_id
+group by type,MONTH (tx_date)
+order by average_literspercooker desc;
+
+
+
+```{r, echo=FALSE}
+
+#### Convert to date
+
+dt3$tx_date <- as.Date(as.character(as.POSIXct(dt3$tx_date)))
+
+### Summarise Total litres sold to each customer
+
+dt3$tx_date <- months(dt3$tx_date)
+
+## Summarise Total litres sold to each customer
+dt3b <- dt3 %>% group_by(customer_id,tx_date) %>% summarise(TotalLitresSold = sum(litres_sold))
+
+dt3c <- left_join(dt3b, df1, by = "customer_id") %>% select(customer_id,tx_date,TotalLitresSold, type)
+
+avg_fuelconsumed_bymonth <- dt3c %>% group_by(type,tx_date) %>% summarise(Total_LitresSold = sum(TotalLitresSold),CookersSold = n()) %>% mutate(average_literspercooker = round(Total_LitresSold/CookersSold))
+
+avg_fuelconsumed_bymonth$tx_date <- factor(avg_fuelconsumed_bymonth$tx_date, levels = c("January","February","March"))
+
+
+```
+
+
+
+
+
+```{r table3, echo=FALSE}
+
+table3 <- data.frame(avg_fuelconsumed_bymonth$type,avg_fuelconsumed_bymonth$tx_date,avg_fuelconsumed_bymonth$average_literspercooker)
+
+knitr::kable(table3,"pipe", col.names = gsub("avg_fuelconsumed_bymonth.","",names(table2)))
+
+```
+
+
+### Plot7
+
+```{r}
+
+plot7 <- ggplot(data = avg_fuelconsumed_bymonth, aes(y= average_literspercooker, x = tx_date, fill = type ))+ geom_bar(position = "dodge", stat = "identity") +geom_text(aes(label=average_literspercooker),position = position_dodge(.9),vjust = 1.6, color = "black")+ ggtitle("Average monthly fuel consumption per cooker for each channel") + xlab("Month")
+
+plot7
+```
+
+
+
+### Question 7
+
+Agents produce most satisfied customers going by their month fuel consumption rates
+
+### Question 8
+
+1) Availability/closeness to customer hence more contact/personal/relatable with Agent 
+2) More trust/reliability with Agent/refferee
+3) Diversity of retail outlets at agent with respect t0 other items of sale (that support fuel consumption)
+
+### Question 9
+1) Focus on Agents and Refferals as channels
+2) Subsidise prices i.e. discounts, scoring for bonus points/awards
+3) Offer fuel for credit (on recommendation basis)
+4) Support retail otluets marketing e.g through billboards
+5) Product improvement & diferentiation
+
+
+### Question 10
+1) What's the rate of commission across channels?
+2) Is the commission similar across territories? (maybe some territories deserve different incentive approach)
+3) Avg (Size) and Composition of HH/restaurants across territories
+4) Population size/ density of target regions
+
+### Assumptions Made:
+Similar fuel consumption across time (i.e. no cases of high demand/low supply) for the restaurants and households
